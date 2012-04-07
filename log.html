@@ -1,0 +1,178 @@
+<html>
+<head>
+<title>log</title>
+<style type="text/css">
+pre { display: inline; }
+input[type="text"] { border-style: none; }
+</style>
+
+<script type="text/javascript">
+var backOffset = 4096;                  // bytes from end
+var updateInterval = 1000;              // update interval
+var secondsOnScreen = 100;              // number of elements on screen, older are removed
+
+var path = document.location.href;
+var urlBase = path.substring(0, path.lastIndexOf('/')+1);
+var currentBytes = 0;
+var currentLocation;
+var outCounter = 0;
+var intervalId;
+var fadeIntervalId = [];
+var fadeColor = [];
+var lastModified='Tue, 01 Jan 1970 00:00:00 GMT';
+var xhr;
+
+function getXmlHttp(){
+  var xmlhttp;
+  try {
+    xmlhttp = new ActiveXObject("Msxml2.XMLHTTP");
+  } catch (e) {
+    try {
+      xmlhttp = new ActiveXObject("Microsoft.XMLHTTP");
+    } catch (E) {
+      xmlhttp = false;
+    }
+  }
+  if (!xmlhttp && typeof XMLHttpRequest!='undefined') {
+    xmlhttp = new XMLHttpRequest();
+  }
+  return xmlhttp;
+}
+
+function countLines(str) {
+  var count = 0;
+  var pos = str.indexOf("\n");
+  while ( pos != -1 ) {
+    count++;
+    pos = str.indexOf("\n", pos+1);
+  }
+  return count;
+}
+
+function eraseOldLogs() {
+  var lists = document.getElementsByTagName("pre");
+  for (var i = 0; i < lists.length; i++) {
+    if (outCounter - parseInt(lists[i].id) > secondsOnScreen) {
+      lists[i].parentNode.removeChild(lists[i]);
+      delete lists[i];
+    }
+  }
+}
+
+function getLogLength(){
+  var xhr = getXmlHttp();
+  xhr.open('HEAD', currentLocation , false);
+  xhr.send(null);
+  if (xhr.readyState == 4) {
+    if (xhr.status == 200) {
+      return parseInt(xhr.getResponseHeader('Content-Length'));
+    }
+  }
+  document.getElementById('ctrlbutt').disabled = true;
+  document.getElementById('log').innerHTML += '<div align="center"><h1>ERROR: ' + xhr.status + '</h1><br>' + currentLocation + ': ' + xhr.statusText +'</div>';
+  return -1;
+}
+
+function startLog (){
+  var logLen;
+  var url = window.location.toString();
+  url.match(/\?(.+)$/); 
+  var logFile = RegExp.$1;
+  if (logFile.length == 0) {
+    getIndex();
+  } else {
+  currentLocation = urlBase + logFile;
+  logLen = getLogLength();
+    if (logLen > 0) {
+      if (logLen > backOffset) {
+          currentBytes = logLen - backOffset;
+      }
+      intervalId = setInterval('getLog()', updateInterval);
+    }
+  }
+}
+
+function startFade() {
+    fadeColor[outCounter] = 224;
+    fadeIntervalId[outCounter] = setInterval('fade(' + outCounter + ')', 50);
+    document.getElementById(outCounter).style.background = 'rgb(' + fadeColor[outCounter] + ', ' + fadeColor[outCounter] + ', ' + fadeColor[outCounter] + ')';
+}
+
+function fade(id){
+    fadeColor[id] += 1;
+    document.getElementById(id).style.background = 'rgb(' + fadeColor[id] + ', ' + fadeColor[id] + ', ' + fadeColor[id] + ')';
+    if (fadeColor[id] == 255) {
+        clearInterval(fadeIntervalId[id]);
+        delete fadeIntervalId[id];
+        delete fadeColor[id];
+    }
+}
+
+function getIndex(){
+  var xhr = getXmlHttp();
+  xhr.open('GET', urlBase, true);
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState == 4) {
+      if (xhr.status == 200) {
+	var logs = xhr.responseText;
+	logs.replace(/.log/,".logs");
+	document.getElementById('log').innerHTML = xhr.responseText.replace(/href=\"(.+?)\"/gm,"href=\"log.html?$1\"");
+	document.getElementById('ctrlbutt').disabled = true;
+      }
+    }
+  }
+  xhr.send(null);
+}
+
+function getLog(){
+  var xhr = getXmlHttp();
+  xhr.open('GET', currentLocation , true);
+  xhr.setRequestHeader('If-Modified-Since', lastModified);
+  xhr.setRequestHeader('Range', 'bytes=' + currentBytes + '-');
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState == 4) {
+      if (xhr.status == 206) {
+        outCounter += 1;
+        currentBytes += parseInt(xhr.getResponseHeader('Content-Length'));
+        lastModified = xhr.getResponseHeader('Last-Modified');
+        document.getElementById('log').innerHTML += '<div id="' + outCounter + '"><pre>' + xhr.responseText + '</pre></div>';
+        document.getElementById('lines').value = 'got ' + countLines(xhr.responseText) + ' lines';
+        if (document.getElementById('hlght').checked) {
+          startFade();
+        }
+        eraseOldLogs();
+        document.getElementById('end').scrollIntoView();
+      }
+      if (xhr.status == 416) {
+        currentBytes = 0;
+      }
+    }
+  }
+  xhr.send(null);
+}
+
+function logStop(){
+    clearInterval(intervalId);
+    document.getElementById('ctrlbutt').onclick = logContinue;
+    document.getElementById('ctrlbutt').value = "continue";
+}
+
+function logContinue(){
+    intervalId = setInterval('getLog()', updateInterval);
+    document.getElementById('ctrlbutt').onclick = logStop;
+    document.getElementById('ctrlbutt').value = "stop";
+}
+
+</script>
+</head>
+
+<body onload="startLog();">
+<div id="log">
+</div>
+<div align="center" id="end">
+<input type="button" value="stop" onclick="logStop();" id="ctrlbutt">
+<input type="text" id="lines" class="lines">
+<input type="checkbox" checked="true" id="hlght">highlight new lines
+</div>
+</body>
+</html>

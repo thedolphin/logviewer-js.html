@@ -1,0 +1,7 @@
+Place log.html to directory with logs.
+Configure http-server to generate index of directory.
+
+Arguments are read after hash sign, i.e. http://logserver/log.html#file.log will show you the contents of http://logserver/file.log and will follow this log.
+
+With no argument script tries to parse index to add itself to every url.
+Works with nginx autoindex.
